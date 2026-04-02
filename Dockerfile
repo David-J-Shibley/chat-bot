@@ -34,4 +34,7 @@ COPY --from=build /app/client/dist ./client/dist
 ENV NODE_ENV=production
 EXPOSE 4000
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD node -e "http=require('http');http.get('http://localhost:4000/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
 CMD ["node", "server.js"]

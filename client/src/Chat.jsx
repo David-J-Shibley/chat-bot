@@ -1,13 +1,101 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const LOCAL_STORAGE_KEY = "chat-bot-messages-v1";
+
+const PERSONAS = [
+  {
+    id: "general",
+    label: "General assistant",
+    systemPrompt:
+      "You are a helpful, concise AI assistant having a friendly conversation with the user.",
+  },
+  {
+    id: "coder",
+    label: "Coding helper",
+    systemPrompt:
+      "You are a senior software engineer. Give practical, concrete code examples and be concise.",
+  },
+  {
+    id: "writer",
+    label: "Writing coach",
+    systemPrompt:
+      "You help the user improve writing with clear suggestions, rewrites, and explanations.",
+  },
+];
 
 function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState(null);
+  const [personaId, setPersonaId] = useState(PERSONAS[0].id);
+  const [model, setModel] = useState("gQwen/Qwen2.5-7B-Instruct");
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(512);
+  const [lastRequest, setLastRequest] = useState(null);
+  const [sessions, setSessions] = useState([]);
 
-  const sendMessage = async () => {
-    const trimmed = input.trim();
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch("/api/history", {
+        headers: { "X-Session-Id": getSessionId() },
+      });
+      const data = await res.json();
+      setSessions(data.sessions || []);
+    };
+    load();
+  }, []);
+
+  // Load initial history from localStorage
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist history whenever it changes
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // ignore
+    }
+  }, [messages]);
+
+  const currentPersona = useMemo(
+    () => PERSONAS.find((p) => p.id === personaId) || PERSONAS[0],
+    [personaId]
+  );
+
+  const clearChat = () => {
+    setMessages([]);
+    setInput("");
+    setIsStreaming(false);
+    setError(null);
+    try {
+      window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const sendMessage = async (overrideInput) => {
+    setError(null);
+    const raw = overrideInput !== undefined ? overrideInput : input;
+    const trimmed = raw.trim();
     if (!trimmed || isStreaming) return;
+    if (trimmed.length > 8000) {
+      setError("Your message is too long. Please shorten it.");
+      return;
+    }
 
     const newMessages = [...messages, { role: "user", content: trimmed }];
     setMessages(newMessages);
@@ -17,12 +105,37 @@ function Chat() {
     // placeholder assistant message to stream into
     setMessages((prev) => [...newMessages, { role: "assistant", content: "" }]);
 
+    const requestPayload = {
+      messages: newMessages,
+      options: {
+        personaId: currentPersona.id,
+        model,
+        temperature,
+        maxTokens,
+      },
+    };
+    setLastRequest(requestPayload);
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify(requestPayload),
       });
+
+      if (!response.ok) {
+        let message = "Something went wrong. Please try again.";
+        try {
+          const data = await response.json();
+          if (data && typeof data.error === "string") {
+            message = data.error;
+          }
+        } catch {
+          // ignore
+        }
+        setError(message);
+        return;
+      }
 
       if (!response.body) {
         throw new Error("No response body");
@@ -37,9 +150,6 @@ function Chat() {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-
-        // If Featherless is sending SSE, this will include the raw SSE text.
-        // For now we just append everything; we can refine later.
         assistantText += chunk;
 
         setMessages((prev) => {
@@ -56,6 +166,7 @@ function Chat() {
       }
     } catch (err) {
       console.error("Streaming error", err);
+      setError("Network error while streaming. Please try again.");
     } finally {
       setIsStreaming(false);
     }
@@ -66,6 +177,58 @@ function Chat() {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  const retryLast = () => {
+    if (!lastRequest || isStreaming) return;
+    // Remove last placeholder assistant if present
+    setMessages((prev) => {
+      if (prev.length && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content) {
+        return prev.slice(0, -1);
+      }
+      return prev;
+    });
+    // Re-run using the stored payload
+    setInput("");
+    setIsStreaming(false);
+    sendMessage(lastRequest.messages[lastRequest.messages.length - 1].content);
+  };
+
+  const copyMessage = async (content) => {
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch {
+      // ignore
+    }
+  };
+
+  const regenerateLast = () => {
+    if (isStreaming) return;
+    const lastUserIndex = [...messages]
+      .map((m, i) => ({ ...m, i }))
+      .filter((m) => m.role === "user")
+      .map((m) => m.i)
+      .pop();
+    if (lastUserIndex === undefined) return;
+
+    const baseMessages = messages.slice(0, lastUserIndex + 1);
+    setMessages(baseMessages);
+    const lastUser = baseMessages[baseMessages.length - 1];
+    if (!lastUser) return;
+    sendMessage(lastUser.content);
+  };
+
+  const editLastAndResend = () => {
+    if (isStreaming) return;
+    const lastUserIndex = [...messages]
+      .map((m, i) => ({ ...m, i }))
+      .filter((m) => m.role === "user")
+      .map((m) => m.i)
+      .pop();
+    if (lastUserIndex === undefined) return;
+    const lastUser = messages[lastUserIndex];
+    setMessages(messages.slice(0, lastUserIndex));
+    setInput(lastUser.content);
   };
 
   return (
@@ -106,11 +269,183 @@ function Chat() {
             color: "#bbf7d0",
             background: "rgba(22,163,74,0.2)",
           }}
-        >
+          >
           {isStreaming ? "Generating..." : "Idle"}
         </span>
       </header>
 
+      {error && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "8px 12px",
+            borderRadius: 10,
+            background: "rgba(248,113,113,0.15)",
+            border: "1px solid rgba(248,113,113,0.5)",
+            color: "#fecaca",
+            fontSize: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span>{error}</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {lastRequest && (
+              <button
+                onClick={retryLast}
+                disabled={isStreaming}
+                style={{
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "3px 8px",
+                  fontSize: 11,
+                  background: "rgba(248,250,252,0.1)",
+                  color: "#fecaca",
+                  cursor: isStreaming ? "not-allowed" : "pointer",
+                }}
+              >
+                Try again
+              </button>
+            )}
+            <button
+              onClick={() => setError(null)}
+              style={{
+                border: "none",
+                borderRadius: 999,
+                padding: "3px 8px",
+                fontSize: 11,
+                background: "transparent",
+                color: "#fecaca",
+                cursor: "pointer",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "center",
+          fontSize: 12,
+          color: "#e5e7eb",
+        }}
+      >
+        <div>
+          <span style={{ marginRight: 4 }}>Persona:</span>
+          <select
+            value={personaId}
+            onChange={(e) => setPersonaId(e.target.value)}
+            style={{
+              background: "#020617",
+              color: "#e5e7eb",
+              borderRadius: 999,
+              border: "1px solid rgba(55,65,81,0.9)",
+              padding: "3px 8px",
+              fontSize: 12,
+            }}
+            disabled={isStreaming}
+          >
+            {PERSONAS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <span style={{ marginRight: 4 }}>Model:</span>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            style={{
+              background: "#020617",
+              color: "#e5e7eb",
+              borderRadius: 999,
+              border: "1px solid rgba(55,65,81,0.9)",
+              padding: "3px 8px",
+              fontSize: 12,
+              minWidth: 200,
+            }}
+            disabled={isStreaming}
+          />
+        </div>
+        <div>
+          <span style={{ marginRight: 4 }}>Temp:</span>
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            max="1.5"
+            value={temperature}
+            onChange={(e) => setTemperature(Number(e.target.value) || 0)}
+            style={{
+              width: 60,
+              background: "#020617",
+              color: "#e5e7eb",
+              borderRadius: 999,
+              border: "1px solid rgba(55,65,81,0.9)",
+              padding: "3px 8px",
+              fontSize: 12,
+            }}
+            disabled={isStreaming}
+          />
+        </div>
+        <div>
+          <span style={{ marginRight: 4 }}>Max tokens:</span>
+          <input
+            type="number"
+            min="64"
+            max="4096"
+            value={maxTokens}
+            onChange={(e) => setMaxTokens(Number(e.target.value) || 0)}
+            style={{
+              width: 80,
+              background: "#020617",
+              color: "#e5e7eb",
+              borderRadius: 999,
+              border: "1px solid rgba(55,65,81,0.9)",
+              padding: "3px 8px",
+              fontSize: 12,
+            }}
+            disabled={isStreaming}
+          />
+        </div>
+        <button
+          onClick={clearChat}
+          disabled={messages.length === 0 || isStreaming}
+          style={{
+            marginLeft: "auto",
+            padding: "4px 10px",
+            borderRadius: 999,
+            border: "1px solid rgba(239,68,68,0.6)",
+            background: "transparent",
+            color: "#fecaca",
+            fontSize: 11,
+            cursor:
+              messages.length === 0 || isStreaming ? "not-allowed" : "pointer",
+          }}
+        >
+          Clear chat
+        </button>
+      </div>
+      <input
+        type="file"
+        accept=".txt,.md,.markdown"
+        onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            setInput((prev) => `${prev}\n\n[Context from ${file.name}]\n${text}`);
+        }}
+        />
       <div
         style={{
           flex: 1,
@@ -162,6 +497,65 @@ function Chat() {
                 ? "…"
                 : "")}
             </div>
+            {m.content && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  marginLeft: 6,
+                }}
+              >
+                <button
+                  onClick={() => copyMessage(m.content)}
+                  style={{
+                    border: "none",
+                    borderRadius: 999,
+                    padding: "2px 6px",
+                    fontSize: 10,
+                    background: "rgba(31,41,55,0.9)",
+                    color: "#e5e7eb",
+                    cursor: "pointer",
+                  }}
+                >
+                  Copy
+                </button>
+                {i === messages.length - 1 && m.role === "assistant" && (
+                  <button
+                    onClick={regenerateLast}
+                    disabled={isStreaming}
+                    style={{
+                      border: "none",
+                      borderRadius: 999,
+                      padding: "2px 6px",
+                      fontSize: 10,
+                      background: "rgba(37,99,235,0.9)",
+                      color: "#e5e7eb",
+                      cursor: isStreaming ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Regenerate
+                  </button>
+                )}
+                {i === messages.length - 1 && m.role === "user" && (
+                  <button
+                    onClick={editLastAndResend}
+                    disabled={isStreaming}
+                    style={{
+                      border: "none",
+                      borderRadius: 999,
+                      padding: "2px 6px",
+                      fontSize: 10,
+                      background: "rgba(56,189,248,0.9)",
+                      color: "#0f172a",
+                      cursor: isStreaming ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Edit & resend
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
