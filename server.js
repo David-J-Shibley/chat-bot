@@ -21,7 +21,7 @@ app.use(express.json());
 
 const FEATHERLESS_API_KEY = process.env.FEATHERLESS_API_KEY;
 const DEFAULT_MODEL =
-  process.env.FEATHERLESS_MODEL || "gQwen/Qwen2.5-7B-Instruct";
+  process.env.FEATHERLESS_MODEL || "Qwen/Qwen2.5-7B-Instruct";
 
 // Simple in-memory rate limiter per IP
 const rateBuckets = new Map();

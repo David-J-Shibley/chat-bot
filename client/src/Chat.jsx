@@ -55,7 +55,7 @@ function Chat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [personaId, setPersonaId] = useState(PERSONAS[0].id);
-  const [model, setModel] = useState("gQwen/Qwen2.5-7B-Instruct");
+  const [model, setModel] = useState("Qwen/Qwen2.5-7B-Instruct");
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(512);
   const [lastRequest, setLastRequest] = useState(null);
