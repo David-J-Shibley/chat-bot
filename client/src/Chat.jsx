@@ -60,6 +60,7 @@ function Chat() {
   const [maxTokens, setMaxTokens] = useState(512);
   const [lastRequest, setLastRequest] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -70,6 +71,16 @@ function Chat() {
       setSessions(data.sessions || []);
     };
     load();
+  }, []);
+
+  // Listen for PWA install prompt event
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPromptEvent(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
   // Load initial history from localStorage
@@ -291,18 +302,45 @@ function Chat() {
             Streaming responses from your Node server in real time.
           </p>
         </div>
-        <span
-          style={{
-            fontSize: 11,
-            padding: "4px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(34,197,94,0.3)",
-            color: "#bbf7d0",
-            background: "rgba(22,163,74,0.2)",
-          }}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {installPromptEvent && (
+            <button
+              onClick={async () => {
+                const ev = installPromptEvent;
+                setInstallPromptEvent(null);
+                try {
+                  await ev.prompt();
+                  await ev.userChoice;
+                } catch {
+                  // ignore
+                }
+              }}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(56,189,248,0.7)",
+                background: "rgba(8,47,73,0.9)",
+                color: "#e0f2fe",
+                cursor: "pointer",
+              }}
+            >
+              Install app
+            </button>
+          )}
+          <span
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(34,197,94,0.3)",
+              color: "#bbf7d0",
+              background: "rgba(22,163,74,0.2)",
+            }}
           >
-          {isStreaming ? "Generating..." : "Idle"}
-        </span>
+            {isStreaming ? "Generating..." : "Idle"}
+          </span>
+        </div>
       </header>
 
       {error && (
