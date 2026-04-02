@@ -115,7 +115,9 @@ function Chat() {
 
   const sendMessage = async (overrideInput) => {
     setError(null);
-    const raw = overrideInput !== undefined ? overrideInput : input;
+    const rawValue = overrideInput !== undefined ? overrideInput : input;
+    const raw =
+      typeof rawValue === "string" ? rawValue : String(rawValue ?? "");
     const trimmed = raw.trim();
     if (!trimmed || isStreaming) return;
     if (trimmed.length > 8000) {
