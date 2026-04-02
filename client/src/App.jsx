@@ -13,22 +13,7 @@ function App() {
         padding: "24px",
       }}
     >
-      <div style={{ display: "flex" }}>
-        <aside style={{ width: 240, ... }}>
-          {sessions.map((s) => (
-            <button
-              key={s.createdAt}
-              onClick={() => setMessages(s.messages || [])}
-              /* style omitted for brevity */
-            >
-              {new Date(s.createdAt).toLocaleTimeString()} – {s.messages?.[1]?.content?.slice(0, 24) || "Chat"}
-            </button>
-          ))}
-        </aside>
-        <main style={{ flex: 1 }}>
-          <Chat />
-        </main>
-      </div>
+      <Chat />
     </div>
   );
 }

@@ -1,6 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 
 const LOCAL_STORAGE_KEY = "chat-bot-messages-v1";
+const SESSION_KEY = "chat-bot-session-id";
+
+function getSessionId() {
+  if (typeof window === "undefined") return "anonymous";
+  let id = window.localStorage.getItem(SESSION_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    try {
+      window.localStorage.setItem(SESSION_KEY, id);
+    } catch {
+      // ignore
+    }
+  }
+  return id;
+}
+
+function newSessionId() {
+  if (typeof window === "undefined") return "anonymous";
+  const id = crypto.randomUUID();
+  try {
+    window.localStorage.setItem(SESSION_KEY, id);
+  } catch {
+    // ignore
+  }
+  return id;
+}
 
 const PERSONAS = [
   {
@@ -119,7 +145,10 @@ function Chat() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-Id": getSessionId(),
+        },
         body: JSON.stringify(requestPayload),
       });
 
@@ -418,23 +447,46 @@ function Chat() {
             disabled={isStreaming}
           />
         </div>
-        <button
-          onClick={clearChat}
-          disabled={messages.length === 0 || isStreaming}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(239,68,68,0.6)",
-            background: "transparent",
-            color: "#fecaca",
-            fontSize: 11,
-            cursor:
-              messages.length === 0 || isStreaming ? "not-allowed" : "pointer",
-          }}
-        >
-          Clear chat
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button
+            onClick={() => {
+              newSessionId();
+              setMessages([]);
+              setInput("");
+              setError(null);
+            }}
+            disabled={isStreaming}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(59,130,246,0.7)",
+              background: "transparent",
+              color: "#bfdbfe",
+              fontSize: 11,
+              cursor: isStreaming ? "not-allowed" : "pointer",
+            }}
+          >
+            New chat
+          </button>
+          <button
+            onClick={clearChat}
+            disabled={messages.length === 0 || isStreaming}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(239,68,68,0.6)",
+              background: "transparent",
+              color: "#fecaca",
+              fontSize: 11,
+              cursor:
+                messages.length === 0 || isStreaming
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          >
+            Clear chat
+          </button>
+        </div>
       </div>
       <input
         type="file"
