@@ -358,6 +358,81 @@ function Chat() {
         </div>
       )}
 
+      {sessions.length > 0 && (
+        <div
+          style={{
+            marginTop: 4,
+            padding: "6px 10px",
+            borderRadius: 12,
+            background: "rgba(15,23,42,0.9)",
+            border: "1px solid rgba(55,65,81,0.9)",
+            fontSize: 11,
+            color: "#e5e7eb",
+            maxHeight: 120,
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 4,
+            }}
+          >
+            <span style={{ fontWeight: 500 }}>Recent chats</span>
+            <span style={{ color: "#9ca3af" }}>
+              {sessions.length > 3 ? `Last ${sessions.length}` : ""}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {sessions.map((s, idx) => {
+              const msgs = Array.isArray(s.messages) ? s.messages : [];
+              const firstUser = msgs.find((m) => m.role === "user");
+              const preview =
+                typeof firstUser?.content === "string"
+                  ? firstUser.content.slice(0, 40)
+                  : "Chat";
+              const created =
+                typeof s.createdAt === "number"
+                  ? new Date(s.createdAt).toLocaleTimeString()
+                  : "";
+              return (
+                <button
+                  key={`${s.sessionId || "s"}-${s.createdAt || idx}`}
+                  onClick={() => {
+                    if (msgs.length) {
+                      // Drop leading system prompts if present
+                      const withoutSystem = msgs.filter(
+                        (m) => m.role !== "system"
+                      );
+                      setMessages(withoutSystem.length ? withoutSystem : msgs);
+                    }
+                  }}
+                  style={{
+                    border: "none",
+                    borderRadius: 999,
+                    padding: "3px 8px",
+                    background: "rgba(31,41,55,0.9)",
+                    color: "#e5e7eb",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    maxWidth: "100%",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                    overflow: "hidden",
+                  }}
+                  title={firstUser?.content || "Chat"}
+                >
+                  {created && <span style={{ color: "#9ca3af" }}>{created} · </span>}
+                  {preview}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
