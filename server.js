@@ -174,7 +174,7 @@ app.post("/api/chat", async (req, res) => {
         TableName: CHAT_TABLE,
         Item: {
           sessionId,
-          createdAt: Date.now(),
+          createdAt: Date.now().toString(),
           personaId,
           model,
           messages: finalMessages, // or a trimmed subset
