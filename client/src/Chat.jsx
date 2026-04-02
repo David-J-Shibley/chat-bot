@@ -720,7 +720,7 @@ function Chat() {
             Enter to send • Shift+Enter for newline
           </small>
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={isStreaming || !input.trim()}
             style={{
               padding: "8px 16px",
