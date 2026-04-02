@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const LOCAL_STORAGE_KEY = "chat-bot-messages-v1";
 const SESSION_KEY = "chat-bot-session-id";
@@ -86,6 +86,7 @@ function Chat() {
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [medicalModelHintDismissed, setMedicalModelHintDismissed] =
     useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (personaId === "medical") {
@@ -310,33 +311,56 @@ function Chat() {
     setInput(lastUser.content);
   };
 
+  const fieldLabel = {
+    display: "block",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#94a3b8",
+    letterSpacing: "0.02em",
+    marginBottom: 6,
+    textTransform: "uppercase",
+  };
+  const fieldControl = {
+    width: "100%",
+    boxSizing: "border-box",
+    background: "#0f172a",
+    color: "#e5e7eb",
+    borderRadius: 10,
+    border: "1px solid rgba(71,85,105,0.9)",
+    padding: "8px 10px",
+    fontSize: 13,
+    outline: "none",
+  };
+
   return (
     <div
       style={{
         width: "100%",
-        maxWidth: 800,
+        maxWidth: 880,
         background: "#020617",
         borderRadius: 24,
-        padding: 24,
+        padding: 20,
         boxShadow: "0 24px 60px rgba(15,23,42,0.8)",
-        border: "1px solid rgba(148,163,184,0.3)",
+        border: "1px solid rgba(148,163,184,0.25)",
         display: "flex",
         flexDirection: "column",
-        gap: 16,
+        gap: 12,
       }}
     >
       <header
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 4,
+          alignItems: "flex-start",
+          gap: 12,
+          paddingBottom: 12,
+          borderBottom: "1px solid rgba(51,65,85,0.6)",
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: 20 }}>Goblin Chat</h1>
-          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>
-            Streaming responses from your Node server in real time.
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Goblin Chat</h1>
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#94a3b8", lineHeight: 1.4 }}>
+            Replies stream in as they are generated.
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -511,31 +535,33 @@ function Chat() {
       {sessions.length > 0 && (
         <div
           style={{
-            marginTop: 4,
-            padding: "6px 10px",
+            padding: "8px 10px",
             borderRadius: 12,
-            background: "rgba(15,23,42,0.9)",
-            border: "1px solid rgba(55,65,81,0.9)",
-            fontSize: 11,
-            color: "#e5e7eb",
-            maxHeight: 120,
-            overflowY: "auto",
+            background: "rgba(15,23,42,0.75)",
+            border: "1px solid rgba(51,65,85,0.7)",
           }}
         >
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#94a3b8",
+              marginBottom: 8,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
             }}
           >
-            <span style={{ fontWeight: 500 }}>Recent chats</span>
-            <span style={{ color: "#9ca3af" }}>
-              {sessions.length > 3 ? `Last ${sessions.length}` : ""}
-            </span>
+            Recent chats
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              overflowX: "auto",
+              paddingBottom: 2,
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
             {sessions.map((s, idx) => {
               const msgs = Array.isArray(s.messages) ? s.messages : [];
               const firstUser = msgs.find((m) => m.role === "user");
@@ -550,9 +576,9 @@ function Chat() {
               return (
                 <button
                   key={`${s.sessionId || "s"}-${s.createdAt || idx}`}
+                  type="button"
                   onClick={() => {
                     if (msgs.length) {
-                      // Drop leading system prompts if present
                       const withoutSystem = msgs.filter(
                         (m) => m.role !== "system"
                       );
@@ -560,21 +586,23 @@ function Chat() {
                     }
                   }}
                   style={{
-                    border: "none",
-                    borderRadius: 999,
-                    padding: "3px 8px",
-                    background: "rgba(31,41,55,0.9)",
+                    flex: "0 0 auto",
+                    border: "1px solid rgba(71,85,105,0.9)",
+                    borderRadius: 10,
+                    padding: "6px 10px",
+                    background: "rgba(30,41,59,0.9)",
                     color: "#e5e7eb",
                     cursor: "pointer",
-                    fontSize: 11,
-                    maxWidth: "100%",
+                    fontSize: 12,
+                    maxWidth: 200,
                     whiteSpace: "nowrap",
                     textOverflow: "ellipsis",
                     overflow: "hidden",
+                    textAlign: "left",
                   }}
                   title={firstUser?.content || "Chat"}
                 >
-                  {created && <span style={{ color: "#9ca3af" }}>{created} · </span>}
+                  {created && <span style={{ color: "#64748b" }}>{created} · </span>}
                   {preview}
                 </button>
               );
@@ -587,98 +615,15 @@ function Chat() {
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 12,
           alignItems: "center",
-          fontSize: 12,
-          color: "#e5e7eb",
+          justifyContent: "space-between",
+          gap: 8,
         }}
       >
-        <div>
-          <span style={{ marginRight: 4 }}>Persona:</span>
-          <select
-            value={personaId}
-            onChange={(e) => setPersonaId(e.target.value)}
-            style={{
-              background: "#020617",
-              color: "#e5e7eb",
-              borderRadius: 999,
-              border: "1px solid rgba(55,65,81,0.9)",
-              padding: "3px 8px",
-              fontSize: 12,
-            }}
-            disabled={isStreaming}
-          >
-            {PERSONAS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <span style={{ marginRight: 4 }}>Model:</span>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            style={{
-              background: "#020617",
-              color: "#e5e7eb",
-              borderRadius: 999,
-              border: "1px solid rgba(55,65,81,0.9)",
-              padding: "3px 8px",
-              fontSize: 12,
-              minWidth: 200,
-            }}
-            disabled={isStreaming}
-          />
-        </div>
-        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <span style={{ marginRight: 4 }}>Answer style:</span>
-          <select
-            value={temperature}
-            onChange={(e) => setTemperature(Number(e.target.value))}
-            style={{
-              width: "100%",
-              maxWidth: 320,
-              background: "#020617",
-              color: "#e5e7eb",
-              borderRadius: 12,
-              border: "1px solid rgba(55,65,81,0.9)",
-              padding: "6px 8px",
-              fontSize: 12,
-            }}
-            disabled={isStreaming}
-          >
-            {PRECISION_CHOICES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <span style={{ marginRight: 4 }}>Max tokens:</span>
-          <input
-            type="number"
-            min="64"
-            max="4096"
-            value={maxTokens}
-            onChange={(e) => setMaxTokens(Number(e.target.value) || 0)}
-            style={{
-              width: 80,
-              background: "#020617",
-              color: "#e5e7eb",
-              borderRadius: 999,
-              border: "1px solid rgba(55,65,81,0.9)",
-              padding: "3px 8px",
-              fontSize: 12,
-            }}
-            disabled={isStreaming}
-          />
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <span style={{ fontSize: 12, color: "#64748b" }}>Conversation</span>
+        <div style={{ display: "flex", gap: 8 }}>
           <button
+            type="button"
             onClick={() => {
               newSessionId();
               setMessages([]);
@@ -687,211 +632,362 @@ function Chat() {
             }}
             disabled={isStreaming}
             style={{
-              padding: "4px 10px",
-              borderRadius: 999,
-              border: "1px solid rgba(59,130,246,0.7)",
-              background: "transparent",
+              padding: "6px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(59,130,246,0.45)",
+              background: "rgba(30,58,138,0.25)",
               color: "#bfdbfe",
-              fontSize: 11,
+              fontSize: 12,
+              fontWeight: 500,
               cursor: isStreaming ? "not-allowed" : "pointer",
+              opacity: isStreaming ? 0.5 : 1,
             }}
           >
             New chat
           </button>
           <button
+            type="button"
             onClick={clearChat}
             disabled={messages.length === 0 || isStreaming}
             style={{
-              padding: "4px 10px",
-              borderRadius: 999,
-              border: "1px solid rgba(239,68,68,0.6)",
-              background: "transparent",
+              padding: "6px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(248,113,113,0.35)",
+              background: "rgba(127,29,29,0.2)",
               color: "#fecaca",
-              fontSize: 11,
+              fontSize: 12,
+              fontWeight: 500,
               cursor:
                 messages.length === 0 || isStreaming
                   ? "not-allowed"
                   : "pointer",
+              opacity:
+                messages.length === 0 || isStreaming ? 0.45 : 1,
             }}
           >
-            Clear chat
+            Clear
           </button>
         </div>
       </div>
-      <input
-        type="file"
-        accept=".txt,.md,.markdown"
-        onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const text = await file.text();
-            setInput((prev) => `${prev}\n\n[Context from ${file.name}]\n${text}`);
+
+      <section
+        style={{
+          padding: 14,
+          borderRadius: 14,
+          background: "rgba(15,23,42,0.6)",
+          border: "1px solid rgba(51,65,85,0.75)",
         }}
-        />
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#94a3b8",
+            marginBottom: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          Model &amp; behavior
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 14,
+          }}
+        >
+          <div>
+            <label style={fieldLabel}>Persona</label>
+            <select
+              value={personaId}
+              onChange={(e) => setPersonaId(e.target.value)}
+              style={{ ...fieldControl, cursor: isStreaming ? "not-allowed" : "pointer" }}
+              disabled={isStreaming}
+            >
+              {PERSONAS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={fieldLabel}>Max tokens</label>
+            <input
+              type="number"
+              min="64"
+              max="4096"
+              value={maxTokens}
+              onChange={(e) => setMaxTokens(Number(e.target.value) || 0)}
+              style={fieldControl}
+              disabled={isStreaming}
+            />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={fieldLabel}>Model</label>
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              style={{
+                ...fieldControl,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 12,
+              }}
+              disabled={isStreaming}
+              placeholder="provider/model-id"
+              autoComplete="off"
+            />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={fieldLabel}>Answer style</label>
+            <select
+              value={temperature}
+              onChange={(e) => setTemperature(Number(e.target.value))}
+              style={{ ...fieldControl, cursor: isStreaming ? "not-allowed" : "pointer" }}
+              disabled={isStreaming}
+            >
+              {PRECISION_CHOICES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
       <div
         style={{
           flex: 1,
-          minHeight: 280,
-          maxHeight: 420,
+          minHeight: 260,
+          maxHeight: 440,
           overflowY: "auto",
-          padding: 12,
+          padding: 14,
           borderRadius: 16,
-          background:
-            "radial-gradient(circle at top left, #1e293b, #020617 65%)",
-          border: "1px solid rgba(55,65,81,0.8)",
+          background: "linear-gradient(165deg, #0f172a 0%, #020617 100%)",
+          border: "1px solid rgba(51,65,85,0.75)",
         }}
       >
         {messages.length === 0 && (
-          <p style={{ fontSize: 13, color: "#9ca3af" }}>
-            Ask anything to start a conversation. Press Enter to send,
-            Shift+Enter for a newline.
+          <p style={{ fontSize: 13, color: "#94a3b8", margin: 0, lineHeight: 1.5 }}>
+            Ask anything to get started. <strong>Enter</strong> sends,{" "}
+            <strong>Shift+Enter</strong> adds a new line.
           </p>
         )}
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            style={{
-              marginBottom: 8,
-              display: "flex",
-              justifyContent:
-                m.role === "user" ? "flex-end" : "flex-start",
-            }}
-          >
+        {messages.map((m, i) => {
+          const bubbleFooterBtn = {
+            border: "none",
+            borderRadius: 8,
+            padding: "4px 8px",
+            fontSize: 11,
+            fontWeight: 500,
+            cursor: "pointer",
+            background: "rgba(15,23,42,0.5)",
+            color: "#cbd5e1",
+          };
+          return (
             <div
+              key={i}
               style={{
-                maxWidth: "80%",
-                padding: "8px 12px",
-                borderRadius: 16,
-                fontSize: 14,
-                whiteSpace: "pre-wrap",
-                background:
-                  m.role === "user"
-                    ? "linear-gradient(135deg, #4f46e5, #6366f1)"
-                    : "rgba(15,23,42,0.9)",
-                color: "#e5e7eb",
-                border:
-                  m.role === "user"
-                    ? "none"
-                    : "1px solid rgba(55,65,81,0.9)",
+                marginBottom: 12,
+                display: "flex",
+                justifyContent:
+                  m.role === "user" ? "flex-end" : "flex-start",
               }}
             >
-              {m.content || (m.role === "assistant" && isStreaming
-                ? "…"
-                : "")}
-            </div>
-            {m.content && (
               <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                  marginLeft: 6,
+                  maxWidth: "min(100%, 520px)",
+                  borderRadius: 16,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  background:
+                    m.role === "user"
+                      ? "linear-gradient(135deg, #4f46e5, #6366f1)"
+                      : "rgba(30,41,59,0.95)",
+                  color: "#e5e7eb",
+                  border:
+                    m.role === "user"
+                      ? "none"
+                      : "1px solid rgba(71,85,105,0.8)",
+                  boxShadow:
+                    m.role === "user"
+                      ? "0 4px 14px rgba(79,70,229,0.25)"
+                      : "0 2px 8px rgba(0,0,0,0.2)",
+                  overflow: "hidden",
                 }}
               >
-                <button
-                  onClick={() => copyMessage(m.content)}
-                  style={{
-                    border: "none",
-                    borderRadius: 999,
-                    padding: "2px 6px",
-                    fontSize: 10,
-                    background: "rgba(31,41,55,0.9)",
-                    color: "#e5e7eb",
-                    cursor: "pointer",
-                  }}
-                >
-                  Copy
-                </button>
-                {i === messages.length - 1 && m.role === "assistant" && (
-                  <button
-                    onClick={regenerateLast}
-                    disabled={isStreaming}
+                <div style={{ padding: "10px 14px" }}>
+                  {m.content || (m.role === "assistant" && isStreaming
+                    ? "…"
+                    : "")}
+                </div>
+                {m.content && (
+                  <div
                     style={{
-                      border: "none",
-                      borderRadius: 999,
-                      padding: "2px 6px",
-                      fontSize: 10,
-                      background: "rgba(37,99,235,0.9)",
-                      color: "#e5e7eb",
-                      cursor: isStreaming ? "not-allowed" : "pointer",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                      gap: 6,
+                      padding: "6px 10px",
+                      borderTop:
+                        m.role === "user"
+                          ? "1px solid rgba(255,255,255,0.12)"
+                          : "1px solid rgba(51,65,85,0.9)",
+                      background:
+                        m.role === "user"
+                          ? "rgba(0,0,0,0.08)"
+                          : "rgba(15,23,42,0.5)",
                     }}
                   >
-                    Regenerate
-                  </button>
-                )}
-                {i === messages.length - 1 && m.role === "user" && (
-                  <button
-                    onClick={editLastAndResend}
-                    disabled={isStreaming}
-                    style={{
-                      border: "none",
-                      borderRadius: 999,
-                      padding: "2px 6px",
-                      fontSize: 10,
-                      background: "rgba(56,189,248,0.9)",
-                      color: "#0f172a",
-                      cursor: isStreaming ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Edit & resend
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(m.content)}
+                      style={bubbleFooterBtn}
+                    >
+                      Copy
+                    </button>
+                    {i === messages.length - 1 && m.role === "assistant" && (
+                      <button
+                        type="button"
+                        onClick={regenerateLast}
+                        disabled={isStreaming}
+                        style={{
+                          ...bubbleFooterBtn,
+                          background: "rgba(37,99,235,0.35)",
+                          color: "#e0e7ff",
+                          cursor: isStreaming ? "not-allowed" : "pointer",
+                          opacity: isStreaming ? 0.5 : 1,
+                        }}
+                      >
+                        Regenerate
+                      </button>
+                    )}
+                    {i === messages.length - 1 && m.role === "user" && (
+                      <button
+                        type="button"
+                        onClick={editLastAndResend}
+                        disabled={isStreaming}
+                        style={{
+                          ...bubbleFooterBtn,
+                          background: "rgba(14,165,233,0.25)",
+                          color: "#e0f2fe",
+                          cursor: isStreaming ? "not-allowed" : "pointer",
+                          opacity: isStreaming ? 0.5 : 1,
+                        }}
+                      >
+                        Edit &amp; resend
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          paddingTop: 4,
+          borderTop: "1px solid rgba(51,65,85,0.5)",
+        }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md,.markdown"
+          style={{ display: "none" }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            setInput(
+              (prev) => `${prev}\n\n[Context from ${file.name}]\n${text}`
+            );
+            e.target.value = "";
+          }}
+        />
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
-          placeholder="Type your message here..."
+          placeholder="Type your message…"
           style={{
             width: "100%",
-            resize: "none",
+            boxSizing: "border-box",
+            resize: "vertical",
+            minHeight: 88,
             borderRadius: 14,
-            padding: "10px 12px",
-            border: "1px solid rgba(55,65,81,0.9)",
+            padding: "12px 14px",
+            border: "1px solid rgba(71,85,105,0.9)",
             outline: "none",
-            fontSize: 14,
-            backgroundColor: "#020617",
+            fontSize: 15,
+            lineHeight: 1.45,
+            fontFamily: "inherit",
+            backgroundColor: "#0f172a",
             color: "#e5e7eb",
           }}
         />
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
+            flexWrap: "wrap",
             alignItems: "center",
-            gap: 12,
+            justifyContent: "space-between",
+            gap: 10,
           }}
         >
-          <small style={{ color: "#6b7280", fontSize: 11 }}>
-            Enter to send • Shift+Enter for newline
-          </small>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(100,116,139,0.6)",
+                background: "rgba(30,41,59,0.8)",
+                color: "#cbd5e1",
+                fontSize: 12,
+                cursor: isStreaming ? "not-allowed" : "pointer",
+                opacity: isStreaming ? 0.5 : 1,
+              }}
+            >
+              Attach .txt / .md
+            </button>
+            <small style={{ color: "#64748b", fontSize: 11 }}>
+              Enter to send · Shift+Enter new line
+            </small>
+          </div>
           <button
+            type="button"
             onClick={() => sendMessage()}
             disabled={isStreaming || !input.trim()}
             style={{
-              padding: "8px 16px",
-              borderRadius: 999,
+              padding: "10px 22px",
+              borderRadius: 12,
               border: "none",
               cursor:
                 isStreaming || !input.trim() ? "not-allowed" : "pointer",
-              fontSize: 13,
-              fontWeight: 500,
+              fontSize: 14,
+              fontWeight: 600,
               background:
                 isStreaming || !input.trim()
-                  ? "rgba(55,65,81,0.9)"
+                  ? "rgba(51,65,85,0.9)"
                   : "linear-gradient(135deg, #22c55e, #16a34a)",
               color: "#0f172a",
-              opacity: isStreaming || !input.trim() ? 0.7 : 1,
+              opacity: isStreaming || !input.trim() ? 0.65 : 1,
             }}
           >
-            {isStreaming ? "Streaming..." : "Send"}
+            {isStreaming ? "Sending…" : "Send"}
           </button>
         </div>
       </div>
