@@ -1,0 +1,15 @@
+chat.grocerygoblin.com {
+    encode gzip zstd
+
+    @static {
+        path_regexp static ^/(assets/|favicon\.ico|manifest\.json)
+    }
+
+    handle @static {
+        reverse_proxy app:4000
+    }
+
+    handle {
+        reverse_proxy app:4000
+    }
+}

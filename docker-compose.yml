@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  app:
+    image: chat-bot-full
+    container_name: chat-bot-app
+    env_file:
+      - .env
+    expose:
+      - "4000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
