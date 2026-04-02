@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import AssistantMarkdown from "./AssistantMarkdown.jsx";
 
 const LOCAL_STORAGE_KEY = "chat-bot-messages-v1";
 const SESSION_KEY = "chat-bot-session-id";
@@ -72,6 +73,46 @@ const PRECISION_CHOICES = [
 /** Suggested model when using the health-information persona (OpenAI-compatible id). */
 const SUGGESTED_MEDICAL_MODEL = "m42-health/Llama3-Med42-8B";
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function UserMessageBody({ text, searchQuery }) {
+  const q = (searchQuery || "").trim();
+  const plain = (
+    <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+      {text}
+    </span>
+  );
+  if (!q) return plain;
+  try {
+    const parts = String(text).split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+    return (
+      <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {parts.map((part, idx) =>
+          part.toLowerCase() === q.toLowerCase() ? (
+            <mark
+              key={idx}
+              style={{
+                background: "rgba(250, 204, 21, 0.5)",
+                color: "#0f172a",
+                borderRadius: 4,
+                padding: "0 3px",
+              }}
+            >
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </span>
+    );
+  } catch {
+    return plain;
+  }
+}
+
 function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -87,6 +128,43 @@ function Chat() {
   const [medicalModelHintDismissed, setMedicalModelHintDismissed] =
     useState(false);
   const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
+  const messageRefs = useRef([]);
+
+  const [threadSearch, setThreadSearch] = useState("");
+  const [activeSearchMatch, setActiveSearchMatch] = useState(0);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const searchMatchIndices = useMemo(() => {
+    const q = threadSearch.trim().toLowerCase();
+    if (!q) return [];
+    return messages.reduce((acc, m, i) => {
+      const c = typeof m.content === "string" ? m.content : "";
+      if (c.toLowerCase().includes(q)) acc.push(i);
+      return acc;
+    }, []);
+  }, [messages, threadSearch]);
+
+  useEffect(() => {
+    setActiveSearchMatch(0);
+  }, [threadSearch]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = setTimeout(() => setToastMessage(null), 2200);
+    return () => clearTimeout(t);
+  }, [toastMessage]);
+
+  useEffect(() => {
+    if (searchMatchIndices.length === 0) return;
+    const safe = Math.min(
+      activeSearchMatch,
+      Math.max(0, searchMatchIndices.length - 1)
+    );
+    const msgIndex = searchMatchIndices[safe];
+    const el = messageRefs.current[msgIndex];
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [activeSearchMatch, searchMatchIndices, threadSearch]);
 
   useEffect(() => {
     if (personaId === "medical") {
@@ -150,7 +228,13 @@ function Chat() {
     [personaId]
   );
 
+  const stopGenerating = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+  };
+
   const clearChat = () => {
+    stopGenerating();
     setMessages([]);
     setInput("");
     setIsStreaming(false);
@@ -179,7 +263,6 @@ function Chat() {
     setInput("");
     setIsStreaming(true);
 
-    // placeholder assistant message to stream into
     setMessages((prev) => [...newMessages, { role: "assistant", content: "" }]);
 
     const requestPayload = {
@@ -193,6 +276,9 @@ function Chat() {
     };
     setLastRequest(requestPayload);
 
+    const ac = new AbortController();
+    abortControllerRef.current = ac;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -201,6 +287,7 @@ function Chat() {
           "X-Session-Id": getSessionId(),
         },
         body: JSON.stringify(requestPayload),
+        signal: ac.signal,
       });
 
       if (!response.ok) {
@@ -245,9 +332,14 @@ function Chat() {
         });
       }
     } catch (err) {
-      console.error("Streaming error", err);
-      setError("Network error while streaming. Please try again.");
+      if (err?.name === "AbortError") {
+        // user stopped generation
+      } else {
+        console.error("Streaming error", err);
+        setError("Network error while streaming. Please try again.");
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsStreaming(false);
     }
   };
@@ -277,8 +369,12 @@ function Chat() {
   const copyMessage = async (content) => {
     try {
       await navigator.clipboard.writeText(content);
+      if (typeof navigator.vibrate === "function") {
+        navigator.vibrate(12);
+      }
+      setToastMessage("Copied to clipboard");
     } catch {
-      // ignore
+      setToastMessage("Could not copy");
     }
   };
 
@@ -363,7 +459,25 @@ function Chat() {
             Replies stream in as they are generated.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {isStreaming && (
+            <button
+              type="button"
+              onClick={stopGenerating}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(251,191,36,0.6)",
+                background: "rgba(120,53,15,0.35)",
+                color: "#fef3c7",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Stop
+            </button>
+          )}
           {installPromptEvent && (
             <button
               onClick={async () => {
@@ -488,8 +602,8 @@ function Chat() {
             >
               {SUGGESTED_MEDICAL_MODEL}
             </code>{" "}
-            (or another health-focused model your API supports) in{" "}
-            <strong>Model</strong> below.
+            (or another health-focused model your API supports) under{" "}
+            <strong>Advanced</strong> below.
           </span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button
@@ -625,6 +739,7 @@ function Chat() {
           <button
             type="button"
             onClick={() => {
+              stopGenerating();
               newSessionId();
               setMessages([]);
               setInput("");
@@ -693,7 +808,7 @@ function Chat() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gridTemplateColumns: "1fr",
             gap: 14,
           }}
         >
@@ -713,34 +828,6 @@ function Chat() {
             </select>
           </div>
           <div>
-            <label style={fieldLabel}>Max tokens</label>
-            <input
-              type="number"
-              min="64"
-              max="4096"
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value) || 0)}
-              style={fieldControl}
-              disabled={isStreaming}
-            />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label style={fieldLabel}>Model</label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              style={{
-                ...fieldControl,
-                fontFamily: "ui-monospace, monospace",
-                fontSize: 12,
-              }}
-              disabled={isStreaming}
-              placeholder="provider/model-id"
-              autoComplete="off"
-            />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
             <label style={fieldLabel}>Answer style</label>
             <select
               value={temperature}
@@ -755,6 +842,64 @@ function Chat() {
               ))}
             </select>
           </div>
+          <details
+            style={{
+              borderRadius: 10,
+              border: "1px solid rgba(51,65,85,0.85)",
+              background: "rgba(15,23,42,0.5)",
+            }}
+          >
+            <summary
+              style={{
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#cbd5e1",
+                listStyle: "none",
+              }}
+            >
+              Advanced — model &amp; limits
+            </summary>
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                padding: "0 12px 14px",
+                borderTop: "1px solid rgba(51,65,85,0.6)",
+                paddingTop: 14,
+              }}
+            >
+              <div>
+                <label style={fieldLabel}>Model id</label>
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  style={{
+                    ...fieldControl,
+                    fontFamily: "ui-monospace, monospace",
+                    fontSize: 12,
+                  }}
+                  disabled={isStreaming}
+                  placeholder="provider/model-id"
+                  autoComplete="off"
+                />
+              </div>
+              <div style={{ maxWidth: 200 }}>
+                <label style={fieldLabel}>Max tokens</label>
+                <input
+                  type="number"
+                  min="64"
+                  max="4096"
+                  value={maxTokens}
+                  onChange={(e) => setMaxTokens(Number(e.target.value) || 0)}
+                  style={fieldControl}
+                  disabled={isStreaming}
+                />
+              </div>
+            </div>
+          </details>
         </div>
       </section>
       <div
@@ -769,6 +914,101 @@ function Chat() {
           border: "1px solid rgba(51,65,85,0.75)",
         }}
       >
+        {messages.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 14,
+              paddingBottom: 12,
+              borderBottom: "1px solid rgba(51,65,85,0.55)",
+            }}
+          >
+            <label
+              htmlFor="thread-search"
+              style={{
+                ...fieldLabel,
+                marginBottom: 0,
+                marginRight: 4,
+                textTransform: "none",
+                letterSpacing: "normal",
+              }}
+            >
+              Search in thread
+            </label>
+            <input
+              id="thread-search"
+              type="search"
+              value={threadSearch}
+              onChange={(e) => setThreadSearch(e.target.value)}
+              placeholder="Filter & jump to matches…"
+              style={{
+                ...fieldControl,
+                flex: "1 1 160px",
+                maxWidth: 280,
+                minWidth: 120,
+              }}
+            />
+            {threadSearch.trim() && (
+              <>
+                {searchMatchIndices.length > 0 ? (
+                  <>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {searchMatchIndices.length} match
+                      {searchMatchIndices.length !== 1 ? "es" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveSearchMatch((m) =>
+                          m <= 0
+                            ? searchMatchIndices.length - 1
+                            : m - 1
+                        )
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(71,85,105,0.9)",
+                        background: "rgba(30,41,59,0.9)",
+                        color: "#e2e8f0",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ↑ Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveSearchMatch((m) =>
+                          m >= searchMatchIndices.length - 1 ? 0 : m + 1
+                        )
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(71,85,105,0.9)",
+                        background: "rgba(30,41,59,0.9)",
+                        color: "#e2e8f0",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ↓ Next
+                    </button>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                    No matches
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {messages.length === 0 && (
           <p style={{ fontSize: 13, color: "#94a3b8", margin: 0, lineHeight: 1.5 }}>
             Ask anything to get started. <strong>Enter</strong> sends,{" "}
@@ -786,14 +1026,39 @@ function Chat() {
             background: "rgba(15,23,42,0.5)",
             color: "#cbd5e1",
           };
+          const q = threadSearch.trim().toLowerCase();
+          const contentStr = typeof m.content === "string" ? m.content : "";
+          const matchesSearch = q && contentStr.toLowerCase().includes(q);
+          const dimmed = Boolean(q && !matchesSearch);
+          const isActiveSearch =
+            Boolean(q) &&
+            searchMatchIndices.length > 0 &&
+            searchMatchIndices[
+              Math.min(activeSearchMatch, searchMatchIndices.length - 1)
+            ] === i;
+          const isStreamingAssistant =
+            m.role === "assistant" &&
+            isStreaming &&
+            i === messages.length - 1;
+
           return (
             <div
               key={i}
+              ref={(el) => {
+                messageRefs.current[i] = el;
+              }}
               style={{
                 marginBottom: 12,
                 display: "flex",
                 justifyContent:
                   m.role === "user" ? "flex-end" : "flex-start",
+                opacity: dimmed ? 0.4 : 1,
+                transition: "opacity 0.2s ease",
+                borderRadius: 16,
+                outline: isActiveSearch
+                  ? "2px solid rgba(56, 189, 248, 0.75)"
+                  : "none",
+                outlineOffset: 3,
               }}
             >
               <div
@@ -802,8 +1067,6 @@ function Chat() {
                   borderRadius: 16,
                   fontSize: 14,
                   lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
                   background:
                     m.role === "user"
                       ? "linear-gradient(135deg, #4f46e5, #6366f1)"
@@ -821,9 +1084,23 @@ function Chat() {
                 }}
               >
                 <div style={{ padding: "10px 14px" }}>
-                  {m.content || (m.role === "assistant" && isStreaming
-                    ? "…"
-                    : "")}
+                  {m.role === "user" ? (
+                    <UserMessageBody
+                      text={m.content}
+                      searchQuery={threadSearch}
+                    />
+                  ) : isStreamingAssistant ? (
+                    <div
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {m.content || "…"}
+                    </div>
+                  ) : (
+                    <AssistantMarkdown content={m.content} />
+                  )}
                 </div>
                 {m.content && (
                   <div
@@ -991,6 +1268,31 @@ function Chat() {
           </button>
         </div>
       </div>
+
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            padding: "10px 20px",
+            borderRadius: 12,
+            background: "rgba(15,23,42,0.96)",
+            border: "1px solid rgba(71,85,105,0.9)",
+            color: "#e2e8f0",
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+            pointerEvents: "none",
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 }
