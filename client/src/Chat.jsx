@@ -47,7 +47,30 @@ const PERSONAS = [
     systemPrompt:
       "You help the user improve writing with clear suggestions, rewrites, and explanations.",
   },
+  {
+    id: "medical",
+    label: "Health information",
+    systemPrompt:
+      "You are a careful health-information assistant. Explain medical concepts, terminology, and general wellness in plain language. You are not a doctor and cannot diagnose, prescribe medications, or replace in-person care. Do not give personalized treatment plans; encourage the user to discuss decisions with a qualified clinician. If symptoms could be serious or an emergency, say so clearly and tell them to seek urgent or emergency medical care. When unsure, say you are unsure and suggest professional evaluation.",
+  },
 ];
+
+// Maps to model temperature (0.1–1.0); labels describe answer style, not jargon.
+const PRECISION_CHOICES = [
+  { value: 0.1, label: "Maximum precision — very focused, consistent" },
+  { value: 0.2, label: "Very high precision" },
+  { value: 0.3, label: "High precision" },
+  { value: 0.4, label: "Mostly precise" },
+  { value: 0.5, label: "Balanced" },
+  { value: 0.6, label: "Slightly more flexible" },
+  { value: 0.7, label: "Flexible — good default" },
+  { value: 0.8, label: "More varied wording" },
+  { value: 0.9, label: "High variety" },
+  { value: 1.0, label: "Maximum variety — more exploratory" },
+];
+
+/** Suggested model when using the health-information persona (OpenAI-compatible id). */
+const SUGGESTED_MEDICAL_MODEL = "m42-health/Llama3-Med42-8B";
 
 function Chat() {
   const [messages, setMessages] = useState([]);
@@ -61,6 +84,20 @@ function Chat() {
   const [lastRequest, setLastRequest] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [medicalModelHintDismissed, setMedicalModelHintDismissed] =
+    useState(false);
+
+  useEffect(() => {
+    if (personaId === "medical") {
+      setMedicalModelHintDismissed(false);
+    }
+  }, [personaId]);
+
+  useEffect(() => {
+    if (!PRECISION_CHOICES.some((c) => c.value === temperature)) {
+      setTemperature(0.7);
+    }
+  }, [temperature]);
 
   useEffect(() => {
     const load = async () => {
@@ -297,7 +334,7 @@ function Chat() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: 20 }}>Featherless Chat</h1>
+          <h1 style={{ margin: 0, fontSize: 20 }}>Goblin Chat</h1>
           <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>
             Streaming responses from your Node server in real time.
           </p>
@@ -387,6 +424,81 @@ function Chat() {
                 fontSize: 11,
                 background: "transparent",
                 color: "#fecaca",
+                cursor: "pointer",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {personaId === "medical" && !medicalModelHintDismissed && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 4,
+            padding: "10px 12px",
+            borderRadius: 12,
+            background: "rgba(14,116,144,0.2)",
+            border: "1px solid rgba(34,211,238,0.45)",
+            color: "#e0f2fe",
+            fontSize: 12,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span style={{ flex: "1 1 220px", lineHeight: 1.45 }}>
+            <strong>Health information mode:</strong> answers are more reliable
+            when you use a medical-tuned model. Try{" "}
+            <code
+              style={{
+                fontSize: 11,
+                padding: "2px 6px",
+                borderRadius: 6,
+                background: "rgba(15,23,42,0.6)",
+              }}
+            >
+              {SUGGESTED_MEDICAL_MODEL}
+            </code>{" "}
+            (or another health-focused model your API supports) in{" "}
+            <strong>Model</strong> below.
+          </span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setModel(SUGGESTED_MEDICAL_MODEL);
+                setMedicalModelHintDismissed(true);
+              }}
+              disabled={isStreaming}
+              style={{
+                border: "none",
+                borderRadius: 999,
+                padding: "6px 12px",
+                fontSize: 12,
+                fontWeight: 500,
+                background: "linear-gradient(135deg, #22d3ee, #06b6d4)",
+                color: "#0f172a",
+                cursor: isStreaming ? "not-allowed" : "pointer",
+                opacity: isStreaming ? 0.6 : 1,
+              }}
+            >
+              Use suggested model
+            </button>
+            <button
+              type="button"
+              onClick={() => setMedicalModelHintDismissed(true)}
+              style={{
+                border: "1px solid rgba(148,163,184,0.5)",
+                borderRadius: 999,
+                padding: "6px 12px",
+                fontSize: 12,
+                background: "transparent",
+                color: "#e2e8f0",
                 cursor: "pointer",
               }}
             >
@@ -521,26 +633,29 @@ function Chat() {
             disabled={isStreaming}
           />
         </div>
-        <div>
-          <span style={{ marginRight: 4 }}>Temp:</span>
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            max="1.5"
+        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+          <span style={{ marginRight: 4 }}>Answer style:</span>
+          <select
             value={temperature}
-            onChange={(e) => setTemperature(Number(e.target.value) || 0)}
+            onChange={(e) => setTemperature(Number(e.target.value))}
             style={{
-              width: 60,
+              width: "100%",
+              maxWidth: 320,
               background: "#020617",
               color: "#e5e7eb",
-              borderRadius: 999,
+              borderRadius: 12,
               border: "1px solid rgba(55,65,81,0.9)",
-              padding: "3px 8px",
+              padding: "6px 8px",
               fontSize: 12,
             }}
             disabled={isStreaming}
-          />
+          >
+            {PRECISION_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <span style={{ marginRight: 4 }}>Max tokens:</span>
@@ -628,8 +743,8 @@ function Chat() {
       >
         {messages.length === 0 && (
           <p style={{ fontSize: 13, color: "#9ca3af" }}>
-            Ask anything to start a conversation with Featherless. Press Enter
-            to send, Shift+Enter for a newline.
+            Ask anything to start a conversation. Press Enter to send,
+            Shift+Enter for a newline.
           </p>
         )}
         {messages.map((m, i) => (

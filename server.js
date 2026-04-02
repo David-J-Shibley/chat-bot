@@ -85,6 +85,9 @@ app.post("/api/chat", async (req, res) => {
     } else if (personaId === "writer") {
       systemPrompt =
         "You help the user improve writing with clear suggestions, rewrites, and explanations.";
+    } else if (personaId === "medical") {
+      systemPrompt =
+        "You are a careful health-information assistant. Explain medical concepts, terminology, and general wellness in plain language. You are not a doctor and cannot diagnose, prescribe medications, or replace in-person care. Do not give personalized treatment plans; encourage the user to discuss decisions with a qualified clinician. If symptoms could be serious or an emergency, say so clearly and tell them to seek urgent or emergency medical care. When unsure, say you are unsure and suggest professional evaluation.";
     }
 
     const finalMessages = [
