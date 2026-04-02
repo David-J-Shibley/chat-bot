@@ -18,7 +18,7 @@ function Chat() {
     setMessages((prev) => [...newMessages, { role: "assistant", content: "" }]);
 
     try {
-      const response = await fetch("http://localhost:4000/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: newMessages }),
